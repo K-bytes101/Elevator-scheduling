@@ -1,12 +1,5 @@
 @echo off
 echo Starting Elevator Simulation...
-
-:: 激活虚拟环境（如果存在）
-if exist venv\Scripts\activate.bat (
-    echo Activating virtual environment...
-    call venv\Scripts\activate.bat
-)
-
 :: 安装依赖
 echo Installing dependencies from requirements.txt...
 pip install -r requirements.txt

@@ -5,16 +5,8 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="a2c1ff9b-80c1-42ce-9ebe-704b5cfb64af" name="更改" comment="">
-      <change afterPath="$PROJECT_DIR$/controllers/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/controllers/look_controller.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/controllers/undone_controller.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/visualization/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/visualization/elevator_visualization.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/LookBasedElevatorController.py" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/start.bat" beforeDir="false" afterPath="$PROJECT_DIR$/start.bat" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -92,7 +84,7 @@
       <updated>1760332532710</updated>
       <workItem from="1760332533735" duration="22349000" />
       <workItem from="1760402238121" duration="15987000" />
-      <workItem from="1760425803136" duration="3356000" />
+      <workItem from="1760425803136" duration="4368000" />
     </task>
     <servers />
   </component>
