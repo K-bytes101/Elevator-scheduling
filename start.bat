@@ -1,5 +1,7 @@
 @echo off
 echo Starting Elevator Simulation...
+:: (创建虚拟环境)
+
 :: 安装依赖
 echo Installing dependencies from requirements.txt...
 pip install -r requirements.txt

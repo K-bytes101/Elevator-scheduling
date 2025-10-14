@@ -3,6 +3,7 @@ import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSlider, QTreeWidget, QTreeWidgetItem, QTextEdit, QScrollBar, QFrame
 from PyQt5.QtGui import QPainter, QPen, QBrush, QColor, QFont
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QObject
+
 from elevator_saga.client.base_controller import ElevatorController
 from elevator_saga.client.proxy_models import ProxyElevator
 from elevator_saga.core.models import Direction

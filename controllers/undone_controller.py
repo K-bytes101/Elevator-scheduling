@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#
 from typing import Dict, List, Set, Optional
 
 from elevator_saga.client.base_controller import ElevatorController
