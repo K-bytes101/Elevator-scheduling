@@ -1,15 +1,15 @@
 from typing import Dict, List
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSlider, QTreeWidget, QTreeWidgetItem, QTextEdit, QScrollBar, QFrame
-from PyQt5.QtGui import QPainter, QPen, QBrush, QColor, QFont
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QObject
+from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSlider, QTreeWidget, QTreeWidgetItem, QTextEdit, QScrollBar, QFrame
+from PyQt6.QtGui import QPainter, QPen, QBrush, QColor, QFont
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject
 
 from elevator_saga.client.base_controller import ElevatorController
 from elevator_saga.client.proxy_models import ProxyElevator
 from elevator_saga.core.models import Direction
 
 class ElevatorVisualization(QObject):
-    """电梯模拟可视化界面（使用 PyQt5 实现）"""
+    """电梯模拟可视化界面（使用 PyQt6 实现）"""
     update_ui_signal = pyqtSignal()
     log_signal = pyqtSignal(str)
 
@@ -37,7 +37,8 @@ class ElevatorVisualization(QObject):
         self.inside_passenger_color = QColor("#9E9E9E")
         self.elevator_border_color = QColor("#333333")
         self.font_small = QFont("Arial", 10)
-        self.font_bold = QFont("Arial", 10, QFont.Bold)
+        self.font_bold = QFont("Arial", 10)
+        self.font_bold.setBold(True)
         self.elevator_positions: Dict[int, int] = {}
         self._positions_initialized = False
         self.visual_y: Dict[int, float] = {}
@@ -53,7 +54,8 @@ class ElevatorVisualization(QObject):
         self.canvas.paintEvent = self._paint_canvas
         self.canvas.resizeEvent = self._on_canvas_resize
         shaft_frame = QFrame()
-        shaft_frame.setFrameStyle(QFrame.Box | QFrame.Raised)
+        shaft_frame.setFrameShape(QFrame.Shape.Box)
+        shaft_frame.setFrameShadow(QFrame.Shadow.Raised)
         shaft_layout = QVBoxLayout(shaft_frame)
         shaft_layout.addWidget(QLabel("电梯井视图"))
         shaft_layout.addWidget(self.canvas)
@@ -69,7 +71,7 @@ class ElevatorVisualization(QObject):
 
     def show(self):
         self.window.show()
-        sys.exit(self.app.exec_())
+        sys.exit(self.app.exec())
 
     def _paint_canvas(self, event):
         painter = QPainter(self.canvas)
@@ -91,14 +93,14 @@ class ElevatorVisualization(QObject):
 
     def _draw_floor_lines(self, painter: QPainter):
         shaft_width = self._get_shaft_width()
-        pen = QPen(self.floor_line_color, 1, Qt.DashLine)
+        pen = QPen(self.floor_line_color, 1, Qt.PenStyle.DashLine)
         painter.setPen(pen)
         painter.setFont(self.font_small)
         for floor in range(self.max_floor + 1):
             y = (self.max_floor - floor) * self.floor_height + 20
             painter.drawLine(self.left_margin, y, shaft_width - self.right_margin, y)
             painter.setPen(self.text_color)
-            painter.drawText(0, y - 10, self.left_margin - 18, 20, Qt.AlignRight, f"F{floor}")
+            painter.drawText(0, y - 10, self.left_margin - 18, 20, Qt.AlignmentFlag.AlignRight, f"F{floor}")
             painter.setPen(pen)
 
     def _init_elevator_positions(self, elevators: List[ProxyElevator]):
@@ -175,7 +177,7 @@ class ElevatorVisualization(QObject):
                 painter.drawEllipse(cx - r, y - r, 2 * r, 2 * r)
             if cnt > max_inline:
                 painter.setPen(self.text_color)
-                painter.drawText(start_x + max_inline * spacing + 8, y - 10, 50, 20, Qt.AlignLeft, f"x{cnt}")
+                painter.drawText(start_x + max_inline * spacing + 8, y - 10, 50, 20, Qt.AlignmentFlag.AlignLeft, f"x{cnt}")
 
     def _draw_elevators(self, painter: QPainter):
         elevators = getattr(self.controller, "elevators", [])
@@ -206,9 +208,9 @@ class ElevatorVisualization(QObject):
             painter.drawRect(left, top, self.elevator_width, self.elevator_height)
             painter.setFont(self.font_bold)
             painter.setPen(QColor("white"))
-            painter.drawText(left, top, self.elevator_width, 20, Qt.AlignCenter, f"E{e.id}")
+            painter.drawText(left, top, self.elevator_width, 20, Qt.AlignmentFlag.AlignCenter, f"E{e.id}")
             passenger_count = len(getattr(e, "passengers", []))
-            painter.drawText(left, bottom - 20, self.elevator_width, 20, Qt.AlignCenter, str(passenger_count))
+            painter.drawText(left, bottom - 20, self.elevator_width, 20, Qt.AlignmentFlag.AlignCenter, str(passenger_count))
             inside_cnt = passenger_count
             if inside_cnt > 0:
                 r = 6
@@ -230,13 +232,16 @@ class ElevatorVisualization(QObject):
                     cy = sy + row * spacing
                     painter.drawEllipse(cx - r, cy - r, 2 * r, 2 * r)
                 if inside_cnt > cols * rows:
-                    painter.setFont(QFont("Arial", 12, QFont.Bold))
+                    font_large_bold = QFont("Arial", 12)
+                    font_large_bold.setBold(True)
+                    painter.setFont(font_large_bold)
                     painter.setPen(self.text_color)
-                    painter.drawText(left, top, self.elevator_width, self.elevator_height, Qt.AlignCenter, f"{inside_cnt}")
+                    painter.drawText(left, top, self.elevator_width, self.elevator_height, Qt.AlignmentFlag.AlignCenter, f"{inside_cnt}")
 
     def _create_status_panel(self, main_layout: QVBoxLayout):
         status_frame = QFrame()
-        status_frame.setFrameStyle(QFrame.Box | QFrame.Raised)
+        status_frame.setFrameShape(QFrame.Shape.Box)
+        status_frame.setFrameShadow(QFrame.Shadow.Raised)
         status_layout = QVBoxLayout(status_frame)
         status_layout.addWidget(QLabel("电梯状态"))
         self.status_tree = QTreeWidget()
@@ -278,7 +283,7 @@ class ElevatorVisualization(QObject):
         param_layout.addWidget(QLabel("视觉参数"))
         interval_layout = QHBoxLayout()
         interval_layout.addWidget(QLabel("刷新 (ms):"))
-        self.ui_interval_slider = QSlider(Qt.Horizontal)
+        self.ui_interval_slider = QSlider(Qt.Orientation.Horizontal)
         self.ui_interval_slider.setRange(30, 500)
         self.ui_interval_slider.setValue(self.ui_interval_ms)
         self.ui_interval_slider.valueChanged.connect(self._on_ui_interval_change)
@@ -286,7 +291,7 @@ class ElevatorVisualization(QObject):
         param_layout.addLayout(interval_layout)
         smooth_layout = QHBoxLayout()
         smooth_layout.addWidget(QLabel("平滑度:"))
-        self.smooth_slider = QSlider(Qt.Horizontal)
+        self.smooth_slider = QSlider(Qt.Orientation.Horizontal)
         self.smooth_slider.setRange(5, 100)
         self.smooth_slider.setValue(int(self.anim_smoothness * 100))
         self.smooth_slider.valueChanged.connect(self._on_smooth_change)
@@ -304,7 +309,8 @@ class ElevatorVisualization(QObject):
 
     def _create_log_panel(self, main_layout: QVBoxLayout):
         log_frame = QFrame()
-        log_frame.setFrameStyle(QFrame.Box | QFrame.Raised)
+        log_frame.setFrameShape(QFrame.Shape.Box)
+        log_frame.setFrameShadow(QFrame.Shadow.Raised)
         log_layout = QVBoxLayout(log_frame)
         log_layout.addWidget(QLabel("事件日志"))
         self.log_text = QTextEdit()
