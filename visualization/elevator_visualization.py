@@ -1,346 +1,363 @@
-from typing import Dict, List
+"""
+电梯调度可视化程序
+使用PyQt6创建实时可视化界面
+"""
 import sys
-from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSlider, QTreeWidget, QTreeWidgetItem, QTextEdit, QScrollBar, QFrame
+import json
+import requests
+from typing import List, Dict, Any, Optional
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
+                             QHBoxLayout, QLabel, QPushButton, QTextEdit, 
+                             QSpinBox, QGroupBox, QGridLayout, QFrame)
+from PyQt6.QtCore import QTimer, pyqtSignal, QThread, pyqtSlot
 from PyQt6.QtGui import QPainter, QPen, QBrush, QColor, QFont
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject
 
-from elevator_saga.client.base_controller import ElevatorController
-from elevator_saga.client.proxy_models import ProxyElevator
-from elevator_saga.core.models import Direction
 
-class ElevatorVisualization(QObject):
-    """电梯模拟可视化界面（使用 PyQt6 实现）"""
-    update_ui_signal = pyqtSignal()
-    log_signal = pyqtSignal(str)
+class SimulationData:
+    """模拟数据类"""
+    
+    def __init__(self):
+        self.elevators: List[Dict[str, Any]] = []
+        self.floors: List[Dict[str, Any]] = []
+        self.events: List[Dict[str, Any]] = []
+        self.metrics: Dict[str, Any] = {}
+        self.tick = 0
+        
+    def update_elevators(self, elevators_data: List[Dict[str, Any]]) -> None:
+        """更新电梯数据"""
+        self.elevators = elevators_data
+        
+    def update_floors(self, floors_data: List[Dict[str, Any]]) -> None:
+        """更新楼层数据"""
+        self.floors = floors_data
+        
+    def update_events(self, events_data: List[Dict[str, Any]]) -> None:
+        """更新事件数据"""
+        self.events = events_data
+        
+    def update_metrics(self, metrics_data: Dict[str, Any]) -> None:
+        """更新指标数据"""
+        self.metrics = metrics_data
 
-    def __init__(self, controller: ElevatorController, max_floor: int = 10,
-                 ui_interval_ms: int = 100, anim_smoothness: float = 0.25):
-        super().__init__()
-        self.controller = controller
-        self.max_floor = max_floor
-        self.ui_interval_ms = ui_interval_ms
-        self.anim_smoothness = max(0.05, min(anim_smoothness, 1.0))
-        self.floor_height = 50
-        self.elevator_width = 64
-        self.elevator_height = 40
-        self.elevator_spacing = 18
-        self.left_margin = 140
-        self.right_margin = 60
-        self.canvas_default_width = 1000
-        self.bg_color = QColor("#f7f7f8")
-        self.floor_line_color = QColor("#d0d0d0")
-        self.text_color = QColor("#222222")
-        self.elevator_up_color = QColor("#4CAF50")
-        self.elevator_down_color = QColor("#F44336")
-        self.elevator_stop_color = QColor("#2196F3")
-        self.waiting_passenger_color = QColor("#FF9800")
-        self.inside_passenger_color = QColor("#9E9E9E")
-        self.elevator_border_color = QColor("#333333")
-        self.font_small = QFont("Arial", 10)
-        self.font_bold = QFont("Arial", 10)
-        self.font_bold.setBold(True)
-        self.elevator_positions: Dict[int, int] = {}
-        self._positions_initialized = False
-        self.visual_y: Dict[int, float] = {}
-        self.app = QApplication(sys.argv)
-        self.window = QMainWindow()
-        self.window.setWindowTitle("电梯调度模拟")
-        self.window.resize(1200, 900)
-        central_widget = QWidget()
-        self.window.setCentralWidget(central_widget)
-        main_layout = QVBoxLayout(central_widget)
-        self.canvas = QWidget()
-        self.canvas.setMinimumHeight(max(300, (self.max_floor + 1) * self.floor_height + 40))
-        self.canvas.paintEvent = self._paint_canvas
-        self.canvas.resizeEvent = self._on_canvas_resize
-        shaft_frame = QFrame()
-        shaft_frame.setFrameShape(QFrame.Shape.Box)
-        shaft_frame.setFrameShadow(QFrame.Shadow.Raised)
-        shaft_layout = QVBoxLayout(shaft_frame)
-        shaft_layout.addWidget(QLabel("电梯井视图"))
-        shaft_layout.addWidget(self.canvas)
-        main_layout.addWidget(shaft_frame)
-        self._create_status_panel(main_layout)
-        self._create_control_panel(main_layout)
-        self._create_log_panel(main_layout)
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.update_ui)
-        self.timer.start(self.ui_interval_ms)
-        self.update_ui_signal.connect(self.update_ui)
-        self.log_signal.connect(self._log_event_slot)
 
-    def show(self):
-        self.window.show()
-        sys.exit(self.app.exec())
-
-    def _paint_canvas(self, event):
-        painter = QPainter(self.canvas)
-        painter.fillRect(self.canvas.rect(), self.bg_color)
-        self._draw_floor_lines(painter)
-        self._draw_waiting_passengers(painter)
-        self._draw_elevators(painter)
-
-    def _on_canvas_resize(self, event):
-        shaft_width = self.canvas.width()
-        self.canvas_default_width = max(self.canvas_default_width, shaft_width)
-        elevators = getattr(self.controller, "elevators", [])
-        if elevators:
-            self._init_elevator_positions(elevators)
-        self.canvas.update()
-
-    def _get_shaft_width(self) -> int:
-        return max(50, self.canvas.width())
-
-    def _draw_floor_lines(self, painter: QPainter):
-        shaft_width = self._get_shaft_width()
-        pen = QPen(self.floor_line_color, 1, Qt.PenStyle.DashLine)
-        painter.setPen(pen)
-        painter.setFont(self.font_small)
-        for floor in range(self.max_floor + 1):
-            y = (self.max_floor - floor) * self.floor_height + 20
-            painter.drawLine(self.left_margin, y, shaft_width - self.right_margin, y)
-            painter.setPen(self.text_color)
-            painter.drawText(0, y - 10, self.left_margin - 18, 20, Qt.AlignmentFlag.AlignRight, f"F{floor}")
-            painter.setPen(pen)
-
-    def _init_elevator_positions(self, elevators: List[ProxyElevator]):
-        if not elevators:
+class ElevatorWidget(QWidget):
+    """电梯可视化组件"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.data = SimulationData()
+        self.setMinimumSize(800, 600)
+        self.setWindowTitle("电梯调度可视化")
+        
+    def paintEvent(self, event):
+        """绘制电梯状态"""
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # 绘制背景
+        painter.fillRect(self.rect(), QColor(240, 240, 240))
+        
+        if not self.data.floors or not self.data.elevators:
+            painter.drawText(self.rect(), "等待数据...")
             return
-        elevs = sorted(elevators, key=lambda e: e.id)
-        shaft_width = self._get_shaft_width()
-        usable_width = max(300, shaft_width - self.left_margin - self.right_margin)
-        num = len(elevs)
-        spacing = self.elevator_spacing
-        total = num * self.elevator_width + (num - 1) * spacing
-        if total > usable_width:
-            spacing = max(4, (usable_width - num * self.elevator_width) // max(1, num - 1))
-        start_x = self.left_margin + (usable_width - total) // 2
-        new_positions = {}
-        for i, e in enumerate(elevs):
-            x = start_x + i * (self.elevator_width + spacing)
-            new_positions[e.id] = x
-        self.elevator_positions = new_positions
-        self._positions_initialized = True
+        
+        # 计算绘制参数
+        floor_height = 40
+        elevator_width = 60
+        margin = 50
+        floors_count = len(self.data.floors)
+        
+        # 绘制楼层
+        for i, floor in enumerate(self.data.floors):
+            y = margin + (floors_count - 1 - i) * floor_height
+            painter.setPen(QPen(QColor(100, 100, 100), 2))
+            painter.drawLine(margin, y, self.width() - margin, y)
+            
+            # 绘制楼层号
+            painter.setPen(QPen(QColor(0, 0, 0)))
+            painter.setFont(QFont("Arial", 10))
+            painter.drawText(margin - 30, y + 5, f"F{floor['floor']}")
+        
+        # 绘制电梯
+        elevators_count = len(self.data.elevators)
+        for i, elevator in enumerate(self.data.elevators):
+            # 计算电梯位置
+            x = margin + 100 + i * (elevator_width + 20)
+            
+            # 计算电梯在楼层中的位置
+            current_floor_float = elevator.get('current_floor_float', 0)
+            floor_index = int(current_floor_float)
+            floor_offset = current_floor_float - floor_index
+            
+            if floor_index < len(self.data.floors):
+                y = margin + (floors_count - 1 - floor_index) * floor_height - floor_offset * floor_height
+                
+                # 绘制电梯
+                painter.setBrush(QBrush(QColor(70, 130, 180)))
+                painter.setPen(QPen(QColor(0, 0, 0), 2))
+                painter.drawRect(x, y - floor_height + 10, elevator_width, floor_height - 10)
+                
+                # 绘制电梯ID
+                painter.setPen(QPen(QColor(255, 255, 255)))
+                painter.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+                painter.drawText(x + 5, y - 5, f"E{elevator['id']}")
+                
+                # 绘制乘客数量
+                passengers_count = len(elevator.get('passengers', []))
+                if passengers_count > 0:
+                    painter.setPen(QPen(QColor(255, 255, 0)))
+                    painter.setFont(QFont("Arial", 8))
+                    painter.drawText(x + 5, y - 20, f"👥{passengers_count}")
+                
+                # 绘制状态指示
+                status = elevator.get('run_status', 'STOPPED')
+                direction = elevator.get('target_floor_direction', 'STOPPED')
+                
+                if status == 'CONSTANT_SPEED':
+                    if direction == 'UP':
+                        painter.setPen(QPen(QColor(0, 255, 0), 3))
+                        painter.drawText(x + elevator_width - 15, y - 5, "↑")
+                    elif direction == 'DOWN':
+                        painter.setPen(QPen(QColor(255, 0, 0), 3))
+                        painter.drawText(x + elevator_width - 15, y - 5, "↓")
+                elif status == 'START_UP':
+                    painter.setPen(QPen(QColor(255, 165, 0), 3))
+                    painter.drawText(x + elevator_width - 15, y - 5, "▲")
+                elif status == 'START_DOWN':
+                    painter.setPen(QPen(QColor(255, 165, 0), 3))
+                    painter.drawText(x + elevator_width - 15, y - 5, "▼")
+        
+        # 绘制标题
+        painter.setPen(QPen(QColor(0, 0, 0)))
+        painter.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+        painter.drawText(10, 25, f"电梯调度可视化 - Tick: {self.data.tick}")
+        
+        # 绘制指标
+        if self.data.metrics:
+            metrics_text = f"完成: {self.data.metrics.get('completed_passengers', 0)}/{self.data.metrics.get('total_passengers', 0)}"
+            painter.setFont(QFont("Arial", 10))
+            painter.drawText(10, self.height() - 60, metrics_text)
+            
+            avg_wait = self.data.metrics.get('average_floor_wait_time', 0)
+            painter.drawText(10, self.height() - 40, f"平均等待: {avg_wait:.1f}tick")
+            
+            p95_wait = self.data.metrics.get('p95_floor_wait_time', 0)
+            painter.drawText(10, self.height() - 20, f"P95等待: {p95_wait:.1f}tick")
 
-    def _get_elevator_floor(self, elevator: ProxyElevator) -> float:
-        if hasattr(elevator, "position"):
-            try:
-                return float(elevator.position)
-            except Exception:
-                pass
-        if hasattr(elevator, "current_floor"):
-            try:
-                return float(elevator.current_floor)
-            except Exception:
-                pass
-        return 0.0
 
-    def update_ui(self):
+class DataFetcher(QThread):
+    """数据获取线程"""
+    
+    data_updated = pyqtSignal(object)
+    
+    def __init__(self, base_url: str = "http://127.0.0.1:8000"):
+        super().__init__()
+        self.base_url = base_url
+        self.running = False
+        
+    def run(self):
+        """运行数据获取循环"""
+        self.running = True
+        while self.running:
+            try:
+                # 获取状态数据
+                state_response = requests.get(f"{self.base_url}/api/state", timeout=1)
+                if state_response.status_code == 200:
+                    state_data = state_response.json()
+                    elevators_data = state_data.get('elevators', [])
+                    floors_data = state_data.get('floors', [])
+                    metrics_data = state_data.get('metrics', {})
+                else:
+                    elevators_data = []
+                    floors_data = []
+                    metrics_data = {}
+                    
+                    # 发送数据更新信号
+                    data = SimulationData()
+                    data.update_elevators(elevators_data)
+                    data.update_floors(floors_data)
+                    data.update_metrics(metrics_data)
+                    data.tick = self.get_current_tick()
+                    
+                    self.data_updated.emit(data)
+                    
+            except Exception as e:
+                print(f"数据获取错误: {e}")
+                
+            self.msleep(100)  # 100ms更新一次
+    
+    def get_current_tick(self) -> int:
+        """获取当前tick"""
         try:
-            elevators = getattr(self.controller, "elevators", [])
-            self.max_floor = getattr(self.controller, "max_floor", self.max_floor)
-            if elevators:
-                self._ensure_positions_match_elevators(elevators)
-            self._update_status_panel(elevators)
-            self.canvas.update()
-        except Exception as e:
-            print(f"UI 更新错误: {e}")
-            self.log_signal.emit(f"UI 更新错误: {e}")
+            response = requests.get(f"{self.base_url}/api/state", timeout=1)
+            if response.status_code == 200:
+                state_data = response.json()
+                return state_data.get('tick', 0)
+        except:
+            pass
+        return 0
+    
+    def stop(self):
+        """停止数据获取"""
+        self.running = False
 
-    def _ensure_positions_match_elevators(self, elevators: List[ProxyElevator]):
-        ids_now = set(self.elevator_positions.keys())
-        ids_new = set(e.id for e in elevators)
-        if ids_now != ids_new or not self._positions_initialized:
-            self._init_elevator_positions(elevators)
 
-    def _draw_waiting_passengers(self, painter: QPainter):
-        waiting_by_floor: Dict[int, int] = {}
-        for e_calls in getattr(self.controller, "elevator_call_floors", {}).values():
-            for floor, cnt in e_calls.items():
-                waiting_by_floor[floor] = waiting_by_floor.get(floor, 0) + cnt
-        r = 6
-        spacing = 2 * r + 4
-        max_inline = 10
-        start_x = 12
-        brush = QBrush(self.waiting_passenger_color)
-        pen = QPen(self.elevator_border_color, 1)
-        painter.setBrush(brush)
-        painter.setPen(pen)
-        painter.setFont(self.font_small)
-        for floor, cnt in waiting_by_floor.items():
-            if cnt <= 0:
-                continue
-            y = (self.max_floor - floor) * self.floor_height + 20
-            display = min(cnt, max_inline)
-            for i in range(display):
-                cx = start_x + i * spacing
-                painter.drawEllipse(cx - r, y - r, 2 * r, 2 * r)
-            if cnt > max_inline:
-                painter.setPen(self.text_color)
-                painter.drawText(start_x + max_inline * spacing + 8, y - 10, 50, 20, Qt.AlignmentFlag.AlignLeft, f"x{cnt}")
-
-    def _draw_elevators(self, painter: QPainter):
-        elevators = getattr(self.controller, "elevators", [])
-        for e in sorted(elevators, key=lambda x: x.id):
-            x = self.elevator_positions.get(e.id, self.left_margin)
-            cur_floor = self._get_elevator_floor(e)
-            target_y = (self.max_floor - cur_floor) * self.floor_height + 20
-            if e.id not in self.visual_y:
-                self.visual_y[e.id] = float(target_y)
-            cur_vis_y = self.visual_y[e.id]
-            new_vis_y = cur_vis_y + (target_y - cur_vis_y) * self.anim_smoothness
-            self.visual_y[e.id] = new_vis_y
-            left = x
-            right = x + self.elevator_width
-            top = int(new_vis_y - self.elevator_height // 2)
-            bottom = int(new_vis_y + self.elevator_height // 2)
-            direction = self.controller.elevator_directions.get(e.id, Direction.STOPPED)
-            if direction == Direction.UP:
-                color = self.elevator_up_color
-            elif direction == Direction.DOWN:
-                color = self.elevator_down_color
+class ElevatorVisualization(QMainWindow):
+    """电梯可视化主窗口"""
+    
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("电梯调度可视化系统")
+        self.setGeometry(100, 100, 1000, 700)
+        
+        # 创建中央部件
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        
+        # 创建布局
+        main_layout = QHBoxLayout(central_widget)
+        
+        # 左侧控制面板
+        control_panel = self.create_control_panel()
+        main_layout.addWidget(control_panel, 1)
+        
+        # 右侧可视化区域
+        self.elevator_widget = ElevatorWidget()
+        main_layout.addWidget(self.elevator_widget, 3)
+        
+        # 创建数据获取线程
+        self.data_fetcher = DataFetcher()
+        self.data_fetcher.data_updated.connect(self.update_data)
+        
+        # 启动数据获取
+        self.data_fetcher.start()
+        
+    def create_control_panel(self) -> QWidget:
+        """创建控制面板"""
+        panel = QGroupBox("控制面板")
+        layout = QVBoxLayout(panel)
+        
+        # 连接状态
+        self.status_label = QLabel("状态: 未连接")
+        layout.addWidget(self.status_label)
+        
+        # 连接按钮
+        self.connect_btn = QPushButton("连接模拟器")
+        self.connect_btn.clicked.connect(self.connect_simulator)
+        layout.addWidget(self.connect_btn)
+        
+        # 步骤控制
+        step_group = QGroupBox("步骤控制")
+        step_layout = QGridLayout(step_group)
+        
+        self.step_count = QSpinBox()
+        self.step_count.setRange(1, 100)
+        self.step_count.setValue(1)
+        step_layout.addWidget(QLabel("步数:"), 0, 0)
+        step_layout.addWidget(self.step_count, 0, 1)
+        
+        self.step_btn = QPushButton("执行步骤")
+        self.step_btn.clicked.connect(self.execute_step)
+        step_layout.addWidget(self.step_btn, 0, 2)
+        
+        layout.addWidget(step_group)
+        
+        # 事件日志
+        events_group = QGroupBox("事件日志")
+        events_layout = QVBoxLayout(events_group)
+        
+        self.events_log = QTextEdit()
+        self.events_log.setMaximumHeight(200)
+        self.events_log.setReadOnly(True)
+        events_layout.addWidget(self.events_log)
+        
+        layout.addWidget(events_group)
+        
+        # 指标显示
+        metrics_group = QGroupBox("性能指标")
+        metrics_layout = QVBoxLayout(metrics_group)
+        
+        self.metrics_label = QLabel("等待数据...")
+        metrics_layout.addWidget(self.metrics_label)
+        
+        layout.addWidget(metrics_group)
+        
+        return panel
+    
+    def connect_simulator(self):
+        """连接模拟器"""
+        try:
+            response = requests.get("http://127.0.0.1:8000/api/state", timeout=2)
+            if response.status_code == 200:
+                self.status_label.setText("状态: 已连接")
+                self.connect_btn.setText("已连接")
+                self.connect_btn.setEnabled(False)
+                self.log_event("成功连接到模拟器")
             else:
-                color = self.elevator_stop_color
-            brush = QBrush(color)
-            pen = QPen(self.elevator_border_color, 2)
-            painter.setBrush(brush)
-            painter.setPen(pen)
-            painter.drawRect(left, top, self.elevator_width, self.elevator_height)
-            painter.setFont(self.font_bold)
-            painter.setPen(QColor("white"))
-            painter.drawText(left, top, self.elevator_width, 20, Qt.AlignmentFlag.AlignCenter, f"E{e.id}")
-            passenger_count = len(getattr(e, "passengers", []))
-            painter.drawText(left, bottom - 20, self.elevator_width, 20, Qt.AlignmentFlag.AlignCenter, str(passenger_count))
-            inside_cnt = passenger_count
-            if inside_cnt > 0:
-                r = 6
-                spacing = 2 * r + 2
-                cols = max(1, (self.elevator_width - 8) // spacing)
-                rows = (inside_cnt + cols - 1) // cols
-                total_w = cols * spacing
-                total_h = rows * spacing
-                sx = left + (self.elevator_width - total_w) // 2 + r
-                sy = top + (self.elevator_height - total_h) // 2 + r
-                brush = QBrush(self.inside_passenger_color)
-                pen = QPen(self.elevator_border_color, 1)
-                painter.setBrush(brush)
-                painter.setPen(pen)
-                for i in range(min(inside_cnt, cols * rows)):
-                    col = i % cols
-                    row = i // cols
-                    cx = sx + col * spacing
-                    cy = sy + row * spacing
-                    painter.drawEllipse(cx - r, cy - r, 2 * r, 2 * r)
-                if inside_cnt > cols * rows:
-                    font_large_bold = QFont("Arial", 12)
-                    font_large_bold.setBold(True)
-                    painter.setFont(font_large_bold)
-                    painter.setPen(self.text_color)
-                    painter.drawText(left, top, self.elevator_width, self.elevator_height, Qt.AlignmentFlag.AlignCenter, f"{inside_cnt}")
-
-    def _create_status_panel(self, main_layout: QVBoxLayout):
-        status_frame = QFrame()
-        status_frame.setFrameShape(QFrame.Shape.Box)
-        status_frame.setFrameShadow(QFrame.Shadow.Raised)
-        status_layout = QVBoxLayout(status_frame)
-        status_layout.addWidget(QLabel("电梯状态"))
-        self.status_tree = QTreeWidget()
-        self.status_tree.setColumnCount(6)
-        self.status_tree.setHeaderLabels(["ID", "位置", "方向", "目标", "乘客数", "目的地"])
-        status_layout.addWidget(self.status_tree)
-        main_layout.addWidget(status_frame)
-
-    def _update_status_panel(self, elevators: List[ProxyElevator]):
-        self.status_tree.clear()
-        for elevator in elevators:
-            elevator_id = str(elevator.id)
-            position = f"{self._get_elevator_floor(elevator):.1f}"
-            direction = self.controller.elevator_directions.get(elevator.id, Direction.STOPPED).name
-            target = str(self.controller.elevator_targets.get(elevator.id, "N/A"))
-            passengers = str(len(getattr(elevator, "passengers", [])))
-            dest_floors = self.controller.elevator_destination_floors.get(elevator.id, {})
-            destinations = ", ".join(str(f) for f in dest_floors.keys()) if dest_floors else "无"
-            item = QTreeWidgetItem([elevator_id, position, direction, target, passengers, destinations])
-            self.status_tree.addTopLevelItem(item)
-
-    def _create_control_panel(self, main_layout: QVBoxLayout):
-        control_frame = QWidget()
-        control_layout = QHBoxLayout(control_frame)
-        speed_up_btn = QPushButton("加速")
-        speed_up_btn.clicked.connect(self.speed_up)
-        control_layout.addWidget(speed_up_btn)
-        speed_down_btn = QPushButton("减速")
-        speed_down_btn.clicked.connect(self.speed_down)
-        control_layout.addWidget(speed_down_btn)
-        toggle_pause_btn = QPushButton("暂停/继续")
-        toggle_pause_btn.clicked.connect(self.toggle_pause)
-        control_layout.addWidget(toggle_pause_btn)
-        reset_btn = QPushButton("重置")
-        reset_btn.clicked.connect(self.reset_simulation)
-        control_layout.addWidget(reset_btn)
-        param_frame = QFrame()
-        param_layout = QVBoxLayout(param_frame)
-        param_layout.addWidget(QLabel("视觉参数"))
-        interval_layout = QHBoxLayout()
-        interval_layout.addWidget(QLabel("刷新 (ms):"))
-        self.ui_interval_slider = QSlider(Qt.Orientation.Horizontal)
-        self.ui_interval_slider.setRange(30, 500)
-        self.ui_interval_slider.setValue(self.ui_interval_ms)
-        self.ui_interval_slider.valueChanged.connect(self._on_ui_interval_change)
-        interval_layout.addWidget(self.ui_interval_slider)
-        param_layout.addLayout(interval_layout)
-        smooth_layout = QHBoxLayout()
-        smooth_layout.addWidget(QLabel("平滑度:"))
-        self.smooth_slider = QSlider(Qt.Orientation.Horizontal)
-        self.smooth_slider.setRange(5, 100)
-        self.smooth_slider.setValue(int(self.anim_smoothness * 100))
-        self.smooth_slider.valueChanged.connect(self._on_smooth_change)
-        smooth_layout.addWidget(self.smooth_slider)
-        param_layout.addLayout(smooth_layout)
-        control_layout.addWidget(param_frame)
-        main_layout.addWidget(control_frame)
-
-    def _on_ui_interval_change(self, value):
-        self.ui_interval_ms = value
-        self.timer.setInterval(self.ui_interval_ms)
-
-    def _on_smooth_change(self, value):
-        self.anim_smoothness = value / 100.0
-
-    def _create_log_panel(self, main_layout: QVBoxLayout):
-        log_frame = QFrame()
-        log_frame.setFrameShape(QFrame.Shape.Box)
-        log_frame.setFrameShadow(QFrame.Shadow.Raised)
-        log_layout = QVBoxLayout(log_frame)
-        log_layout.addWidget(QLabel("事件日志"))
-        self.log_text = QTextEdit()
-        self.log_text.setReadOnly(True)
-        log_layout.addWidget(self.log_text)
-        main_layout.addWidget(log_frame)
-
-    def _log_event_slot(self, message: str):
-        self.log_text.append(message)
-        self.log_text.verticalScrollBar().setValue(self.log_text.verticalScrollBar().maximum())
-
+                self.status_label.setText("状态: 连接失败")
+                self.log_event("连接失败: HTTP错误")
+        except Exception as e:
+            self.status_label.setText("状态: 连接失败")
+            self.log_event(f"连接失败: {e}")
+    
+    def execute_step(self):
+        """执行模拟步骤"""
+        try:
+            num_ticks = self.step_count.value()
+            response = requests.post("http://127.0.0.1:8000/api/step", 
+                                   json={"num_ticks": num_ticks}, timeout=2)
+            if response.status_code == 200:
+                events = response.json()
+                self.log_event(f"执行了 {num_ticks} 个tick，产生 {len(events)} 个事件")
+            else:
+                self.log_event(f"执行步骤失败: HTTP错误")
+        except Exception as e:
+            self.log_event(f"执行步骤失败: {e}")
+    
     def log_event(self, message: str):
-        self.log_signal.emit(message)
+        """记录事件"""
+        self.events_log.append(f"[{self.get_current_time()}] {message}")
+        # 限制日志长度
+        if self.events_log.document().blockCount() > 100:
+            cursor = self.events_log.textCursor()
+            cursor.movePosition(cursor.MoveOperation.Start)
+            cursor.select(cursor.SelectionType.BlockUnderCursor)
+            cursor.removeSelectedText()
+    
+    def get_current_time(self) -> str:
+        """获取当前时间字符串"""
+        from datetime import datetime
+        return datetime.now().strftime("%H:%M:%S")
+    
+    @pyqtSlot(object)
+    def update_data(self, data: SimulationData):
+        """更新数据"""
+        self.elevator_widget.data = data
+        self.elevator_widget.update()
+        
+        # 更新指标显示
+        if data.metrics:
+            metrics_text = f"""完成乘客: {data.metrics.get('completed_passengers', 0)}/{data.metrics.get('total_passengers', 0)}
+平均楼层等待: {data.metrics.get('average_floor_wait_time', 0):.1f}tick
+P95楼层等待: {data.metrics.get('p95_floor_wait_time', 0):.1f}tick
+平均总等待: {data.metrics.get('average_arrival_wait_time', 0):.1f}tick
+P95总等待: {data.metrics.get('p95_arrival_wait_time', 0):.1f}tick"""
+            self.metrics_label.setText(metrics_text)
+    
+    def closeEvent(self, event):
+        """关闭事件"""
+        self.data_fetcher.stop()
+        self.data_fetcher.wait()
+        event.accept()
 
-    def speed_up(self):
-        if hasattr(self.controller, "speed_up"):
-            self.controller.speed_up()
-        self.log_event("模拟加速")
 
-    def speed_down(self):
-        if hasattr(self.controller, "speed_down"):
-            self.controller.speed_down()
-        self.log_event("模拟减速")
+def main():
+    """主函数"""
+    app = QApplication(sys.argv)
+    window = ElevatorVisualization()
+    window.show()
+    sys.exit(app.exec())
 
-    def toggle_pause(self):
-        if hasattr(self.controller, "toggle_pause"):
-            self.controller.toggle_pause()
-        self.log_event("模拟暂停/继续")
 
-    def reset_simulation(self):
-        if hasattr(self.controller, "reset"):
-            self.controller.reset()
-        self.log_event("模拟已重置")
+if __name__ == "__main__":
+    main()
