@@ -168,7 +168,7 @@ class ElevatorController(ABC):
                 print(f"Error getting metrics: {e}")
         return {}
     
-    def run_simulation(self, max_ticks: int = 1000) -> None:
+    def run_simulation(self, max_ticks: int = 1000, wait_for_visualization: bool = False, visualization_wait_time: int = 5, tick_delay: float = 0.0) -> None:
         """运行模拟"""
         if not self.connect():
             print("无法连接到模拟器")
@@ -185,6 +185,13 @@ class ElevatorController(ABC):
         # 调用初始化方法
         self.on_init(self.elevators, self.floors)
         
+        # 等待可视化程序启动
+        if wait_for_visualization:
+            print(f"等待可视化程序启动 ({visualization_wait_time}秒)...")
+            import time
+            time.sleep(visualization_wait_time)
+            print("开始运行调度算法...")
+        
         tick = 0
         while tick < max_ticks:
             # 获取事件
@@ -199,6 +206,11 @@ class ElevatorController(ABC):
             
             # 更新电梯状态
             self.elevators = self.get_elevators()
+            
+            # 添加延迟以便可视化
+            if tick_delay > 0:
+                import time
+                time.sleep(tick_delay)
             
             # 检查是否完成
             metrics = self.get_metrics()

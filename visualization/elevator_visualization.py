@@ -9,7 +9,7 @@ from typing import List, Dict, Any, Optional
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QLabel, QPushButton, QTextEdit, 
                              QSpinBox, QGroupBox, QGridLayout, QFrame)
-from PyQt6.QtCore import QTimer, pyqtSignal, QThread, pyqtSlot
+from PyQt6.QtCore import QTimer, pyqtSignal, QThread, pyqtSlot, Qt
 from PyQt6.QtGui import QPainter, QPen, QBrush, QColor, QFont
 
 
@@ -46,8 +46,29 @@ class ElevatorWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.data = SimulationData()
-        self.setMinimumSize(800, 600)
+        self.setMinimumSize(1000, 700)
         self.setWindowTitle("电梯调度可视化")
+        
+        # 尝试获取初始状态
+        self.load_initial_state()
+    
+    def load_initial_state(self):
+        """加载初始状态"""
+        try:
+            import requests
+            response = requests.get("http://127.0.0.1:8000/api/state", timeout=1)
+            if response.status_code == 200:
+                state_data = response.json()
+                elevators_data = state_data.get('elevators', [])
+                floors_data = state_data.get('floors', [])
+                
+                if elevators_data and floors_data:
+                    self.data.update_elevators(elevators_data)
+                    self.data.update_floors(floors_data)
+                    self.data.tick = state_data.get('tick', 0)
+                    print(f"加载初始状态: {len(elevators_data)}部电梯, {len(floors_data)}层楼")
+        except Exception as e:
+            print(f"加载初始状态失败: {e}")
         
     def paintEvent(self, event):
         """绘制电梯状态"""
@@ -58,13 +79,13 @@ class ElevatorWidget(QWidget):
         painter.fillRect(self.rect(), QColor(240, 240, 240))
         
         if not self.data.floors or not self.data.elevators:
-            painter.drawText(self.rect(), "等待数据...")
+            painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "等待数据...")
             return
         
         # 计算绘制参数
-        floor_height = 40
-        elevator_width = 60
-        margin = 50
+        floor_height = 50  # 增加楼层高度
+        elevator_width = 80  # 增加电梯宽度
+        margin = 80  # 增加边距
         floors_count = len(self.data.floors)
         
         # 绘制楼层
@@ -77,15 +98,50 @@ class ElevatorWidget(QWidget):
             painter.setPen(QPen(QColor(0, 0, 0)))
             painter.setFont(QFont("Arial", 10))
             painter.drawText(margin - 30, y + 5, f"F{floor['floor']}")
+            
+            # 绘制等待乘客
+            up_queue = floor.get('up_queue', [])
+            down_queue = floor.get('down_queue', [])
+            
+            # 绘制乘客等待区域背景
+            if up_queue or down_queue:
+                painter.setBrush(QBrush(QColor(255, 255, 200, 100)))
+                painter.setPen(QPen(QColor(200, 200, 200), 1))
+                painter.drawRect(int(margin + 5), int(y - floor_height + 5), int(60), int(floor_height - 10))
+            
+            # 上行乘客
+            if up_queue:
+                painter.setPen(QPen(QColor(0, 150, 0), 2))
+                painter.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+                painter.drawText(int(margin + 10), int(y - 10), f"↑{len(up_queue)}")
+                
+                # 绘制乘客图标
+                painter.setFont(QFont("Arial", 12))
+                painter.drawText(int(margin + 45), int(y - 10), "👥")
+            
+            # 下行乘客
+            if down_queue:
+                painter.setPen(QPen(QColor(150, 0, 0), 2))
+                painter.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+                painter.drawText(int(margin + 10), int(y + 10), f"↓{len(down_queue)}")
+                
+                # 绘制乘客图标
+                painter.setFont(QFont("Arial", 12))
+                painter.drawText(int(margin + 45), int(y + 10), "👥")
         
         # 绘制电梯
         elevators_count = len(self.data.elevators)
         for i, elevator in enumerate(self.data.elevators):
-            # 计算电梯位置
-            x = margin + 100 + i * (elevator_width + 20)
+            # 计算电梯位置 (为乘客信息留出更多空间)
+            x = margin + 150 + i * (elevator_width + 30)
             
             # 计算电梯在楼层中的位置
-            current_floor_float = elevator.get('current_floor_float', 0)
+            position = elevator.get('position', {})
+            current_floor = position.get('current_floor', 0)
+            floor_up_position = position.get('floor_up_position', 0)
+            
+            # 计算精确位置 (current_floor + floor_up_position/10)
+            current_floor_float = current_floor + floor_up_position / 10.0
             floor_index = int(current_floor_float)
             floor_offset = current_floor_float - floor_index
             
@@ -95,37 +151,50 @@ class ElevatorWidget(QWidget):
                 # 绘制电梯
                 painter.setBrush(QBrush(QColor(70, 130, 180)))
                 painter.setPen(QPen(QColor(0, 0, 0), 2))
-                painter.drawRect(x, y - floor_height + 10, elevator_width, floor_height - 10)
+                painter.drawRect(int(x), int(y - floor_height + 10), int(elevator_width), int(floor_height - 10))
                 
                 # 绘制电梯ID
                 painter.setPen(QPen(QColor(255, 255, 255)))
                 painter.setFont(QFont("Arial", 10, QFont.Weight.Bold))
-                painter.drawText(x + 5, y - 5, f"E{elevator['id']}")
+                painter.drawText(int(x + 5), int(y - 5), f"E{elevator['id']}")
                 
                 # 绘制乘客数量
                 passengers_count = len(elevator.get('passengers', []))
+                max_capacity = elevator.get('max_capacity', 8)
+                
+                # 绘制容量指示
+                painter.setPen(QPen(QColor(100, 100, 100), 1))
+                painter.setFont(QFont("Arial", 8))
+                painter.drawText(int(x + 5), int(y - 25), f"{passengers_count}/{max_capacity}")
+                
+                # 绘制乘客图标
                 if passengers_count > 0:
-                    painter.setPen(QPen(QColor(255, 255, 0)))
-                    painter.setFont(QFont("Arial", 8))
-                    painter.drawText(x + 5, y - 20, f"👥{passengers_count}")
+                    painter.setPen(QPen(QColor(255, 165, 0), 2))
+                    painter.setFont(QFont("Arial", 12))
+                    painter.drawText(int(x + 5), int(y - 10), "👥")
+                    
+                    # 绘制乘客数量
+                    painter.setPen(QPen(QColor(255, 255, 255)))
+                    painter.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+                    painter.drawText(int(x + 20), int(y - 5), str(passengers_count))
                 
                 # 绘制状态指示
                 status = elevator.get('run_status', 'STOPPED')
-                direction = elevator.get('target_floor_direction', 'STOPPED')
+                direction = elevator.get('last_tick_direction', 'STOPPED')
                 
-                if status == 'CONSTANT_SPEED':
-                    if direction == 'UP':
+                if status == 'constant_speed':
+                    if direction == 'up':
                         painter.setPen(QPen(QColor(0, 255, 0), 3))
-                        painter.drawText(x + elevator_width - 15, y - 5, "↑")
-                    elif direction == 'DOWN':
+                        painter.drawText(int(x + elevator_width - 15), int(y - 5), "↑")
+                    elif direction == 'down':
                         painter.setPen(QPen(QColor(255, 0, 0), 3))
-                        painter.drawText(x + elevator_width - 15, y - 5, "↓")
-                elif status == 'START_UP':
+                        painter.drawText(int(x + elevator_width - 15), int(y - 5), "↓")
+                elif status == 'start_up':
                     painter.setPen(QPen(QColor(255, 165, 0), 3))
-                    painter.drawText(x + elevator_width - 15, y - 5, "▲")
-                elif status == 'START_DOWN':
+                    painter.drawText(int(x + elevator_width - 15), int(y - 5), "▲")
+                elif status == 'start_down':
                     painter.setPen(QPen(QColor(255, 165, 0), 3))
-                    painter.drawText(x + elevator_width - 15, y - 5, "▼")
+                    painter.drawText(int(x + elevator_width - 15), int(y - 5), "▼")
         
         # 绘制标题
         painter.setPen(QPen(QColor(0, 0, 0)))
@@ -167,17 +236,13 @@ class DataFetcher(QThread):
                     elevators_data = state_data.get('elevators', [])
                     floors_data = state_data.get('floors', [])
                     metrics_data = state_data.get('metrics', {})
-                else:
-                    elevators_data = []
-                    floors_data = []
-                    metrics_data = {}
                     
                     # 发送数据更新信号
                     data = SimulationData()
                     data.update_elevators(elevators_data)
                     data.update_floors(floors_data)
                     data.update_metrics(metrics_data)
-                    data.tick = self.get_current_tick()
+                    data.tick = state_data.get('tick', 0)
                     
                     self.data_updated.emit(data)
                     
@@ -229,6 +294,9 @@ class ElevatorVisualization(QMainWindow):
         self.data_fetcher = DataFetcher()
         self.data_fetcher.data_updated.connect(self.update_data)
         
+        # 自动连接模拟器
+        self.connect_simulator()
+        
         # 启动数据获取
         self.data_fetcher.start()
         
@@ -242,7 +310,7 @@ class ElevatorVisualization(QMainWindow):
         layout.addWidget(self.status_label)
         
         # 连接按钮
-        self.connect_btn = QPushButton("连接模拟器")
+        self.connect_btn = QPushButton("重新连接模拟器")
         self.connect_btn.clicked.connect(self.connect_simulator)
         layout.addWidget(self.connect_btn)
         
@@ -287,17 +355,24 @@ class ElevatorVisualization(QMainWindow):
     def connect_simulator(self):
         """连接模拟器"""
         try:
+            self.status_label.setText("状态: 正在连接...")
+            self.log_event("正在连接模拟器...")
+            
             response = requests.get("http://127.0.0.1:8000/api/state", timeout=2)
             if response.status_code == 200:
                 self.status_label.setText("状态: 已连接")
-                self.connect_btn.setText("已连接")
-                self.connect_btn.setEnabled(False)
+                self.connect_btn.setText("重新连接模拟器")
+                self.connect_btn.setEnabled(True)
                 self.log_event("成功连接到模拟器")
             else:
                 self.status_label.setText("状态: 连接失败")
+                self.connect_btn.setText("重新连接模拟器")
+                self.connect_btn.setEnabled(True)
                 self.log_event("连接失败: HTTP错误")
         except Exception as e:
             self.status_label.setText("状态: 连接失败")
+            self.connect_btn.setText("重新连接模拟器")
+            self.connect_btn.setEnabled(True)
             self.log_event(f"连接失败: {e}")
     
     def execute_step(self):
