@@ -20,9 +20,9 @@ def main():
                        help="启用调试模式")
     parser.add_argument("--wait-visualization", "-w", action="store_true",
                        help="等待可视化程序启动")
-    parser.add_argument("--visualization-wait-time", type=int, default=5,
+    parser.add_argument("--visualization-wait-time", type=int, default=2.5,
                        help="等待可视化程序的时间(秒) (默认: 5)")
-    parser.add_argument("--tick-delay", "-d", type=float, default=0.0,
+    parser.add_argument("--tick-delay", "-d", type=float, default=0.3,
                        help="每个tick之间的延迟时间(秒) (默认: 0.0)")
     
     args = parser.parse_args()

@@ -43,8 +43,8 @@ start.bat --help
 - `--max-ticks [数量]`: 指定最大tick数 (默认: 2000)
 - `--no-debug`: 禁用调试模式
 - `--no-wait`: 不等待可视化程序
-- `--wait-time [秒数]`: 指定等待可视化程序的时间 (默认: 5)
-- `--tick-delay [秒数]`: 指定每个tick之间的延迟时间 (默认: 0.5)
+- `--wait-time [秒数]`: 指定等待可视化程序的时间 (默认: 2.5)
+- `--tick-delay [秒数]`: 指定每个tick之间的延迟时间 (默认: 0.3)
 - `--help`: 显示帮助信息
 
 **启动顺序**:
@@ -79,7 +79,7 @@ stop.bat
 python -m elevator_saga.server.simulator
 
 # 终端2: 启动调度算法
-python main.py --controller bus --debug --wait-visualization --tick-delay 0.5
+python main.py --controller bus --debug --wait-visualization --tick-delay 0.3
 
 # 终端3: 启动可视化
 python run_visualization.py
@@ -90,8 +90,8 @@ python run_visualization.py
 ### 启动顺序
 1. **模拟器必须最先启动** - 调度算法和可视化程序依赖模拟器
 2. **等待时间** - 脚本会自动等待模拟器启动完成
-3. **可视化等待** - 调度算法会等待可视化程序启动（默认5秒）
-4. **延迟设置** - 默认每个tick延迟0.5秒，便于可视化演示
+3. **可视化等待** - 调度算法会等待可视化程序启动（默认2.5秒）
+4. **延迟设置** - 默认每个tick延迟0.3秒，便于可视化演示
 5. **端口占用** - 确保8000端口未被占用
 
 ### 依赖要求
@@ -142,7 +142,7 @@ set DEBUG_MODE=--debug
 - **关闭调试**: 提高运行性能，减少输出
 
 ### 延迟设置
-- **默认延迟**: 0.5秒，适合可视化演示
+- **默认延迟**: 0.3秒，适合可视化演示
 - **无延迟**: 设置为0.0，适合性能测试
 - **自定义延迟**: 根据需要调整，建议0.1-2.0秒
 

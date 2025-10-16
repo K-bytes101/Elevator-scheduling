@@ -134,6 +134,14 @@ class BusController(ElevatorController):
             if state_response.status_code == 200:
                 state_data = state_response.json()
                 floors_data = state_data.get('floors', [])
+                elevators_data = state_data.get('elevators', [])
+                
+                # 找到当前电梯的完整信息
+                current_elevator_data = None
+                for elevator_data in elevators_data:
+                    if elevator_data['id'] == elevator.id:
+                        current_elevator_data = elevator_data
+                        break
                 
                 # 找到当前楼层
                 current_floor_data = None
@@ -142,12 +150,30 @@ class BusController(ElevatorController):
                         current_floor_data = floor_data
                         break
                 
-                if current_floor_data:
+                if current_elevator_data and current_floor_data:
+                    # 检查电梯是否满员
+                    passengers_count = len(current_elevator_data.get('passengers', []))
+                    max_capacity = current_elevator_data.get('max_capacity', 8)
+                    is_full = passengers_count >= max_capacity
+                    
                     # 检查是否有乘客等待
                     up_queue = current_floor_data.get('up_queue', [])
                     down_queue = current_floor_data.get('down_queue', [])
                     
                     should_stop = False
+                    
+                    # 新增逻辑：如果电梯满员，检查后续楼层是否有乘客要下去
+                    if is_full:
+                        # 检查后续楼层是否有乘客要下去
+                        has_passengers_alighting_ahead = self._check_passengers_alighting_ahead(
+                            elevator, direction, floors_data
+                        )
+                        
+                        if not has_passengers_alighting_ahead:
+                            # 电梯满员且后续楼层没有乘客要下去，跳过当前楼层
+                            if self.debug:
+                                print(f"电梯 {elevator.id} 满员({passengers_count}/{max_capacity})且后续楼层无下客，跳过楼层 {floor.floor}")
+                            return
                     
                     # Bus算法：特殊处理顶层和底层
                     if floor.floor >= self.max_floor:
@@ -185,6 +211,55 @@ class BusController(ElevatorController):
         except Exception as e:
             if self.debug:
                 print(f"获取楼层状态失败: {e}")
+    
+    def _check_passengers_alighting_ahead(self, elevator: ProxyElevator, direction: str, floors_data: List[dict]) -> bool:
+        """检查后续楼层是否有乘客要下去"""
+        try:
+            # 获取电梯内乘客的目标楼层
+            passengers = elevator.passengers
+            if not passengers:
+                return False
+            
+            # 获取电梯内乘客的目标楼层信息
+            state_response = requests.get(f"{self.base_url}/api/state")
+            if state_response.status_code != 200:
+                return False
+                
+            state_data = state_response.json()
+            passengers_data = state_data.get('passengers', [])
+            
+            # 找到电梯内乘客的目标楼层
+            alighting_floors = set()
+            for passenger_id in passengers:
+                for passenger_data in passengers_data:
+                    if passenger_data['id'] == passenger_id:
+                        destination = passenger_data.get('destination', -1)
+                        if destination >= 0:
+                            alighting_floors.add(destination)
+                        break
+            
+            if not alighting_floors:
+                return False
+            
+            # 检查后续楼层是否在目标楼层中
+            current_floor = elevator.current_floor
+            if direction == "up":
+                # 向上运行，检查当前楼层以上的目标楼层
+                for floor_num in alighting_floors:
+                    if floor_num > current_floor:
+                        return True
+            else:  # down
+                # 向下运行，检查当前楼层以下的目标楼层
+                for floor_num in alighting_floors:
+                    if floor_num < current_floor:
+                        return True
+            
+            return False
+            
+        except Exception as e:
+            if self.debug:
+                print(f"检查后续下客楼层失败: {e}")
+            return False
 
 
 if __name__ == "__main__":
