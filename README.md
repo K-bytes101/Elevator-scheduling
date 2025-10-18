@@ -8,14 +8,16 @@
 Elevator-scheduling/
 ├── controllers/                    # 调度算法控制器
 │   ├── __init__.py
-│   ├── elevator_controller.py     # 电梯控制器基类
-│   └── bus_controller.py          # Bus调度算法实现
+│   ├── elevator_controller.py      # 电梯控制器基类
+│   ├── bus_controller.py           # Bus调度算法实现
+│   └── look_controller.py          # LOOK调度算法实现
 ├── visualization/                  # 可视化程序
 │   ├── __init__.py
 │   └── elevator_visualization.py  # PyQt6可视化界面
 ├── main.py                        # 主程序入口
 ├── run_visualization.py           # 可视化程序启动脚本
 ├── pyproject.toml                 # 项目配置
+├── STARTUP_GUIDE.md               # 项目启动脚本说明
 └── README.md                      # 项目说明
 ```
 

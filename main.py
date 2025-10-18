@@ -4,13 +4,14 @@
 import sys
 import argparse
 from controllers.bus_controller import BusController
+from controllers.look_controller import LookController
 
 
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(description="电梯调度算法")
     parser.add_argument("--controller", "-c", default="bus",
-                       choices=["bus"],
+                       choices=["bus", "look"],
                        help="选择调度算法 (默认: bus)")
     parser.add_argument("--url", "-u", default="http://127.0.0.1:8000",
                        help="模拟器URL (默认: http://127.0.0.1:8000)")
@@ -40,24 +41,36 @@ def main():
     # 根据参数创建对应的控制器
     if args.controller == "bus":
         controller = BusController(base_url=args.url, debug=args.debug)
+        # 运行模拟
+        try:
+            controller.run_simulation(
+                max_ticks=args.max_ticks,
+                wait_for_visualization=args.wait_visualization,
+                visualization_wait_time=args.visualization_wait_time,
+                tick_delay=args.tick_delay
+            )
+        except KeyboardInterrupt:
+            print("\n用户中断程序")
+        except Exception as e:
+            print(f"程序运行出错: {e}")
+            if args.debug:
+                import traceback
+                traceback.print_exc()
+
+    elif args.controller == "look":
+        controller = LookController(base_url=args.url, debug=args.debug)
+        try:
+            controller.start()
+        except KeyboardInterrupt:
+            print("\n用户中断程序")
+        except Exception as e:
+            print(f"程序运行出错: {e}")
+            if args.debug:
+                import traceback
+                traceback.print_exc()
     else:
         print(f"未知的调度算法: {args.controller}")
         sys.exit(1)
 
-    # 运行模拟
-    try:
-        controller.run_simulation(
-            max_ticks=args.max_ticks,
-            wait_for_visualization=args.wait_visualization,
-            visualization_wait_time=args.visualization_wait_time,
-            tick_delay=args.tick_delay
-        )
-    except KeyboardInterrupt:
-        print("\n用户中断程序")
-    except Exception as e:
-        print(f"程序运行出错: {e}")
-        if args.debug:
-            import traceback
-            traceback.print_exc()
 if __name__ == "__main__":
     main()

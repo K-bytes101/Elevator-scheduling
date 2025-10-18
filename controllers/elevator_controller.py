@@ -168,7 +168,7 @@ class ElevatorController(ABC):
                 print(f"Error getting metrics: {e}")
         return {}
     
-    def run_simulation(self, max_ticks: int = 1000, wait_for_visualization: bool = False, visualization_wait_time: int = 5, tick_delay: float = 0.0) -> None:
+    def run_simulation(self, max_ticks: int = 10000, wait_for_visualization: bool = False, visualization_wait_time: int = 5, tick_delay: float = 0.0) -> None:
         """运行模拟"""
         if not self.connect():
             print("无法连接到模拟器")

@@ -28,45 +28,6 @@ class LookElevatorController(ElevatorController):
         self.simulation_delay = 0.5
         self.paused = False
 
-    def speed_up(self):
-        """加速模拟（减少延迟）"""
-        self.simulation_delay = max(0.01, self.simulation_delay / 2)
-        if self.debug:
-            print(f"模拟延迟调整为: {self.simulation_delay:.2f} 秒")
-            if self.visualization:
-                self.visualization.log_event(f"模拟延迟调整为: {self.simulation_delay:.2f} 秒")
-
-    def speed_down(self):
-        """减速模拟（增加延迟）"""
-        self.simulation_delay *= 2
-        if self.debug:
-            print(f"模拟延迟调整为: {self.simulation_delay:.2f} 秒")
-            if self.visualization:
-                self.visualization.log_event(f"模拟延迟调整为: {self.simulation_delay:.2f} 秒")
-
-    def toggle_pause(self):
-        """切换暂停状态"""
-        self.paused = not self.paused
-        if self.debug:
-            print(f"模拟已{'暂停' if self.paused else '继续'}")
-            if self.visualization:
-                self.visualization.log_event(f"模拟已{'暂停' if self.paused else '继续'}")
-
-    def reset(self):
-        """重置模拟"""
-        try:
-            self._api_client.reset()
-        except AttributeError:
-            self.new_passengers = []
-            self.elevator_call_floors = {}
-            self.elevator_destination_floors = {}
-            self.elevator_directions = {}
-            self.elevator_targets = {}
-            if self.debug:
-                print("模拟内部状态已重置（API 重置未实现）")
-                if self.visualization:
-                    self.visualization.log_event("模拟内部状态已重置（API 重置未实现）")
-
     def on_init(self, elevators: List[ProxyElevator], floors: List[ProxyFloor]) -> None:
         self.max_floor = len(floors) - 1
         for elevator in elevators:
@@ -78,7 +39,6 @@ class LookElevatorController(ElevatorController):
         if self.visualization:
             self.visualization.max_floor = self.max_floor
             try:
-                self.visualization._init_elevator_positions(elevators)
                 self.visualization.update_ui_signal.emit()
             except Exception as e:
                 print(f"初始化错误: {e}")

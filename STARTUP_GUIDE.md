@@ -13,10 +13,10 @@
 # 使用默认配置（推荐）
 start.bat
 
-# 指定调度算法
-start.bat --controller bus
+# 指定调度算法, 可用调度器: bus, look
+start.bat --controller look
 
-# 指定最大tick数
+# 指定最大tick数(look调度器不支持)
 start.bat --max-ticks 1000
 
 # 禁用调试模式

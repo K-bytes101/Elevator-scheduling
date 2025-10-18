@@ -10,7 +10,7 @@ echo.
 
 REM Set default parameters
 set SIMULATOR_URL=http://127.0.0.1:8000
-set CONTROLLER=bus
+set CONTROLLER=look
 set MAX_TICKS=2000
 set DEBUG_MODE=--debug
 set WAIT_VISUALIZATION=--wait-visualization
@@ -65,7 +65,7 @@ echo Usage: start.bat [options]
 echo.
 echo Options:
 echo   --controller [algorithm]  Specify scheduling algorithm (default: bus)
-echo   --max-ticks [number]       Specify maximum ticks (default: 2000)
+echo   --max-ticks [number]       Specify maximum ticks (default: 10000)
 echo   --no-debug                Disable debug mode
 echo   --no-wait                 Don't wait for visualization
 echo   --wait-time [seconds]     Specify wait time for visualization (default: 2.5)
@@ -99,6 +99,41 @@ if errorlevel 1 (
     echo Error: Python not found, please ensure Python is installed and added to PATH
     pause
     exit /b 1
+)
+
+REM Check if poetry was installed
+python -m poetry --version >nul 2>&1
+if errorlevel 1 (
+    echo Poetry not found. Installing Poetry for current user using pip...
+    echo (This may take a minute)
+    python -m pip install poetry
+    if errorlevel 1 (
+        echo ERROR: failed to install poetry via pip.
+        echo You can also install Poetry manually: https://python-poetry.org/docs/#installation
+        pause
+        exit /b 1
+    )
+    echo Poetry installed (pip --user). Continuing...
+) else (
+    echo Poetry is already installed.
+)
+
+echo Installing project dependencies via Poetry...
+python -m poetry install
+if errorlevel 1 (
+    echo ERROR: "poetry install" failed.
+    echo Check pyproject.toml / poetry.lock and your network.
+    pause
+    exit /b 1
+)
+
+echo Activating venv
+for /f "tokens=*" %%i in ('python -m poetry env activate') do set ACTIVATE_CMD=%%i
+call %ACTIVATE_CMD%
+if errorlevel 1 (
+    echo WARNING: Failed to activate virtual environment. Continuing...
+) else (
+    echo Virtual environment activated successfully.
 )
 
 REM Check if elevator_saga module is available
@@ -153,7 +188,18 @@ if errorlevel 1 (
 )
 
 echo.
-echo [2/3] Starting %CONTROLLER% scheduling algorithm...
+echo [2/3] Starting visualization program...
+echo Command: python run_visualization.py
+echo.
+
+REM Start visualization program first for better display (keep window)
+start "Elevator Visualization" python run_visualization.py
+
+echo Waiting for algorithm to start...
+timeout /t 2 /nobreak >nul
+
+echo.
+echo [3/3] Starting %CONTROLLER% scheduling algorithm...
 set ALGORITHM_CMD=python main.py --controller %CONTROLLER% --max-ticks %MAX_TICKS% %DEBUG_MODE% %WAIT_VISUALIZATION% --visualization-wait-time %VISUALIZATION_WAIT_TIME% --tick-delay %TICK_DELAY%
 echo Command: %ALGORITHM_CMD%
 echo.
@@ -161,17 +207,6 @@ echo.
 REM Start algorithm in background
 start /b %ALGORITHM_CMD% >nul 2>&1
 echo Algorithm started in background
-
-echo Waiting for algorithm to start...
-timeout /t 2 /nobreak >nul
-
-echo.
-echo [3/3] Starting visualization program...
-echo Command: python run_visualization.py
-echo.
-
-REM Start visualization program (keep window)
-start "Elevator Visualization" python run_visualization.py
 
 echo.
 echo ========================================
